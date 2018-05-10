@@ -64,6 +64,66 @@ class DaskAdlFileSystem(AzureDLFileSystem, core.FileSystem):
         adl_path = self._trim_filename(path)
         return self.info(adl_path)['length']
 
+    def _get_pyarrow_filesystem(self):
+        from pyarrow.util import implements
+        from pyarrow.filesystem import FileSystem, DaskFileSystem
+        from azure.datalake.store.core import AzureDLPath
+        import posixpath
+        import os
+        class AzureDLFSWrapper(DaskFileSystem):
+
+            @implements(FileSystem.isdir)
+            def isdir(self, path):
+                apath = AzureDLPath(path).trim().as_posix()
+                try:
+                    contents = self.fs.ls(apath)
+                    if len(contents) == 1 and contents[0] == apath:
+                        return False
+                    else:
+                        return True
+                except OSError:
+                    return False
+
+            @implements(FileSystem.isfile)
+            def isfile(self, path):
+                apath = AzureDLPath(path).trim().as_posix()
+                try:
+                    contents = self.fs.ls(apath)
+                    return len(contents) == 1 and contents[0] == apath
+                except OSError:
+                    return False
+
+            def walk(self, path, invalidate_cache=True):
+                """
+                Directory tree generator, like os.walk
+
+                Generator version of what is in adlfs, which yields a flattened list of
+                files
+                """
+                directories = set()
+                files = set()
+
+                for apath in list(self.fs._ls(path, invalidate_cache=invalidate_cache)):
+                    if apath['type'] == 'DIRECTORY':
+                        directories.add(apath['name'])
+                    elif apath['type'] == 'FILE':
+                        files.add(apath['name'])
+                    else:
+                        pass
+
+                files = sorted([posixpath.split(f)[1] for f in files
+                                if f not in directories])
+                directories = sorted([posixpath.split(x)[1]
+                                    for x in directories])
+
+                yield path, directories, files
+
+                for directory in directories:
+                    for tup in self.walk(directory, invalidate_cache=invalidate_cache):
+                        yield tup
+
+        return AzureDLFSWrapper(self)
+
     def __getstate__(self):
         dic = self.__dict__.copy()
         del dic['token']
