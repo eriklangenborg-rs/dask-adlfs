@@ -10,7 +10,7 @@ from dask.base import tokenize
 logger = logging.getLogger(__name__)
 
 
-class DaskAdlFileSystem(AzureDLFileSystem, core.FileSystem):
+class DaskAdlFileSystem(AzureDLFileSystem):
     """API spec for the methods a filesystem
 
     A filesystem must provide these methods, if it is to be registered as
@@ -30,7 +30,7 @@ class DaskAdlFileSystem(AzureDLFileSystem, core.FileSystem):
         self.kwargs['store_name'] = kwargs['host']
         logger.debug("Init with kwargs: %s", self.kwargs)
         self.do_connect()
-    
+
     def do_connect(self):
         token = lib.auth(tenant_id=self.tenant_id,
                          client_id=self.client_id,
